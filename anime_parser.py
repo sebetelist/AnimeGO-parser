@@ -1,4 +1,5 @@
 from bs4 import BeautifulSoup
+from random import uniform
 import requests
 import json
 import csv
@@ -6,31 +7,39 @@ import os
 import time
 
 def fetch_page_data(page):
-    url = f'https://animego.org/anime?sort=a.createdAt&direction=desc&type=animes&page={page}'
+    url = f'https://animego.me/anime/{page}'
     headers = {
         "User-Agent": "Mozilla/5.0 (Windows NT 10.0; rv:129.0) Gecko/20100101 Firefox/129.0",
         "Accept": "*/*"
     }
-    try:
-        response = requests.get(url, headers=headers)
-        response.raise_for_status()  # Проверка на ошибки HTTP
-    except requests.HTTPError as e:
-        if e.response.status_code == 404:
-            return None  # Возвращаем None, если страница не найдена
-        else:
-            raise  # Для других ошибок HTTP выбрасываем исключение
+    response = requests.get(url, headers=headers)
+    response.raise_for_status()
     return response.text
+
 
 def parse_anime_data(page_content):
     soup = BeautifulSoup(page_content, 'lxml')
-    anime_blocks = soup.find_all('div', class_='media-body')
+    anime_blocks = soup.find_all('div', class_='ani-list__item')
     anime_data_list = []
 
     for anime in anime_blocks:
-        title = anime.find(class_='h5').text.strip()
-        url = anime.find('a')['href']
-        description = anime.find('div', class_='description').text.strip()
-        genres = [genre.text.strip() for genre in anime.find_all('a', class_='text-link-gray')]
+        title_div = anime.find('div', class_='ani-list__item-title')
+        link_tag = title_div.find('a') if title_div else None
+        if not link_tag:
+            continue
+
+        title = link_tag.text.strip()
+        url = link_tag['href']
+
+        desc_tag = anime.find('div', class_='ani-list__item-description')
+        description = desc_tag.text.strip() if desc_tag else ''
+
+        genres_container = anime.find('div', class_='ani-list__item-genres')
+        genres = []
+        if genres_container:
+            for a in genres_container.find_all('a', class_='ani-list__item-genres__link'):
+                if '/anime/genre/' in a.get('href', ''):
+                    genres.append(a.text.strip())
 
         anime_data_list.append({
             "Title": title,
@@ -38,8 +47,9 @@ def parse_anime_data(page_content):
             "Description": description,
             "URL": url
         })
-    
+
     return anime_data_list
+
 
 def clear_files(json_filename, csv_filename):
     # Создаем директорию, если она не существует
@@ -59,15 +69,19 @@ def collect_all_anime_data(num_pages, json_filename, csv_filename):
     all_anime_data = []
 
     csv_file_exists = os.path.exists(csv_filename)
-
     for page in range(1, num_pages + 1):
         print(f"Fetching page {page}...")
         page_content = fetch_page_data(page)
         if page_content is None:
             print(f"Page {page} not found. Exiting.")
             break
-        
+
         page_data = parse_anime_data(page_content)
+        print(f"  Найдено тайтлов: {len(page_data)}")
+        if not page_data:
+            print("Пустая страница — похоже, конец каталога. Останавливаюсь.")
+            break
+
         all_anime_data.extend(page_data)
         
         # Записываем обновленные данные в JSON файл
@@ -88,7 +102,10 @@ def collect_all_anime_data(num_pages, json_filename, csv_filename):
             for i, anime in enumerate(page_data, start=start_index):
                 writer.writerow([i, anime['Title'], anime['Genres'], anime['Description'], anime['URL']])
         
-        time.sleep(1)  # Задержка между запросами для предотвращения блокировки
+        time.sleep(uniform(0.3, 0.5))  # Задержка между запросами для предотвращения блокировки
 
 # Запуск сбора данных
-collect_all_anime_data(1000, "anime-data/anime.json", "anime-data/anime.csv")
+try:
+    collect_all_anime_data(1000, "anime-data/anime.json", "anime-data/anime.csv")
+except requests.exceptions.HTTPError:
+    print(f"The end of the list reached")

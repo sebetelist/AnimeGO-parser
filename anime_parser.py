@@ -6,6 +6,8 @@ import csv
 import os
 import time
 
+
+# Соединение со страницей animego
 def fetch_page_data(page):
     url = f'https://animego.me/anime/{page}'
     headers = {
@@ -17,6 +19,7 @@ def fetch_page_data(page):
     return response.text
 
 
+# Парсинг и получение данных со страницы
 def parse_anime_data(page_content):
     soup = BeautifulSoup(page_content, 'lxml')
     anime_blocks = soup.find_all('div', class_='ani-list__item')
@@ -51,6 +54,7 @@ def parse_anime_data(page_content):
     return anime_data_list
 
 
+# Запись в файлы json и csv 
 def clear_files(json_filename, csv_filename):
     # Создаем директорию, если она не существует
     os.makedirs(os.path.dirname(json_filename), exist_ok=True)
@@ -70,16 +74,16 @@ def collect_all_anime_data(num_pages, json_filename, csv_filename):
 
     csv_file_exists = os.path.exists(csv_filename)
     for page in range(1, num_pages + 1):
-        print(f"Fetching page {page}...")
+        print(f"Соединение со страницей {page}...")
         page_content = fetch_page_data(page)
         if page_content is None:
-            print(f"Page {page} not found. Exiting.")
+            print(f"Страница {page} не найдена. Выход...")
             break
 
         page_data = parse_anime_data(page_content)
         print(f"  Найдено тайтлов: {len(page_data)}")
         if not page_data:
-            print("Пустая страница — похоже, конец каталога. Останавливаюсь.")
+            print("Пустая страница или конец каталога. Останавливаюсь...")
             break
 
         all_anime_data.extend(page_data)
@@ -102,10 +106,10 @@ def collect_all_anime_data(num_pages, json_filename, csv_filename):
             for i, anime in enumerate(page_data, start=start_index):
                 writer.writerow([i, anime['Title'], anime['Genres'], anime['Description'], anime['URL']])
         
-        time.sleep(uniform(0.3, 0.5))  # Задержка между запросами для предотвращения блокировки
+        time.sleep(uniform(0.2, 0.4))  # Задержка между запросами(антибот), можно менять
 
 # Запуск сбора данных
 try:
     collect_all_anime_data(1000, "anime-data/anime.json", "anime-data/anime.csv")
 except requests.exceptions.HTTPError:
-    print(f"The end of the list reached")
+    print(f"Конец списка.")
